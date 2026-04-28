@@ -1,0 +1,297 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-amber: var(--amber);
+  --color-amber-foreground: var(--amber-foreground);
+  --color-emerald: var(--emerald);
+  --color-emerald-foreground: var(--emerald-foreground);
+  --color-occupied: var(--occupied);
+  --color-occupied-foreground: var(--occupied-foreground);
+  --color-rose: var(--rose);
+  --color-rose-foreground: var(--rose-foreground);
+  --color-ai: var(--ai);
+  --color-ai-foreground: var(--ai-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Dark-first executive dashboard. Light mode is a fallback. */
+:root {
+  --radius: 0.625rem;
+
+  /* deep slate base */
+  --background: oklch(0.18 0.025 256);
+  --foreground: oklch(0.97 0.005 250);
+
+  --card: oklch(0.22 0.028 256);
+  --card-foreground: oklch(0.97 0.005 250);
+
+  --popover: oklch(0.22 0.028 256);
+  --popover-foreground: oklch(0.97 0.005 250);
+
+  /* sky / AI accent as primary */
+  --primary: oklch(0.74 0.16 235);
+  --primary-foreground: oklch(0.18 0.025 256);
+
+  --secondary: oklch(0.28 0.03 256);
+  --secondary-foreground: oklch(0.97 0.005 250);
+
+  --muted: oklch(0.26 0.025 256);
+  --muted-foreground: oklch(0.7 0.02 256);
+
+  --accent: oklch(0.3 0.04 256);
+  --accent-foreground: oklch(0.97 0.005 250);
+
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 250);
+
+  --border: oklch(0.32 0.025 256);
+  --input: oklch(0.3 0.025 256);
+  --ring: oklch(0.74 0.16 235);
+
+  /* Domain semantic tokens — muted, aesthetically toned */
+  --amber: oklch(0.74 0.11 78);
+  --amber-foreground: oklch(0.2 0.04 70);
+  --emerald: oklch(0.66 0.09 160);
+  --emerald-foreground: oklch(0.16 0.03 160);
+  --occupied: oklch(0.66 0.09 160);
+  --occupied-foreground: oklch(0.16 0.03 160);
+  --rose: oklch(0.62 0.13 22);
+  --rose-foreground: oklch(0.98 0.01 22);
+  --ai: oklch(0.7 0.11 235);
+  --ai-foreground: oklch(0.18 0.025 256);
+
+  --sidebar: oklch(0.16 0.025 256);
+  --sidebar-foreground: oklch(0.92 0.01 250);
+  --sidebar-primary: oklch(0.74 0.16 235);
+  --sidebar-primary-foreground: oklch(0.16 0.025 256);
+  --sidebar-accent: oklch(0.24 0.03 256);
+  --sidebar-accent-foreground: oklch(0.97 0.005 250);
+  --sidebar-border: oklch(0.28 0.025 256);
+  --sidebar-ring: oklch(0.74 0.16 235);
+}
+
+.dark {
+  /* same as :root — dark-first */
+  --background: oklch(0.18 0.025 256);
+  --foreground: oklch(0.97 0.005 250);
+  --card: oklch(0.22 0.028 256);
+  --card-foreground: oklch(0.97 0.005 250);
+  --popover: oklch(0.22 0.028 256);
+  --popover-foreground: oklch(0.97 0.005 250);
+  --primary: oklch(0.74 0.16 235);
+  --primary-foreground: oklch(0.18 0.025 256);
+  --secondary: oklch(0.28 0.03 256);
+  --secondary-foreground: oklch(0.97 0.005 250);
+  --muted: oklch(0.26 0.025 256);
+  --muted-foreground: oklch(0.7 0.02 256);
+  --accent: oklch(0.3 0.04 256);
+  --accent-foreground: oklch(0.97 0.005 250);
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 250);
+  --border: oklch(0.32 0.025 256);
+  --input: oklch(0.3 0.025 256);
+  --ring: oklch(0.74 0.16 235);
+  --amber: oklch(0.74 0.11 78);
+  --amber-foreground: oklch(0.2 0.04 70);
+  --emerald: oklch(0.66 0.09 160);
+  --emerald-foreground: oklch(0.16 0.03 160);
+  --occupied: oklch(0.66 0.09 160);
+  --occupied-foreground: oklch(0.16 0.03 160);
+  --rose: oklch(0.62 0.13 22);
+  --rose-foreground: oklch(0.98 0.01 22);
+  --ai: oklch(0.7 0.11 235);
+  --ai-foreground: oklch(0.18 0.025 256);
+  --sidebar: oklch(0.16 0.025 256);
+  --sidebar-foreground: oklch(0.92 0.01 250);
+  --sidebar-primary: oklch(0.74 0.16 235);
+  --sidebar-primary-foreground: oklch(0.16 0.025 256);
+  --sidebar-accent: oklch(0.24 0.03 256);
+  --sidebar-accent-foreground: oklch(0.97 0.005 250);
+  --sidebar-border: oklch(0.28 0.025 256);
+  --sidebar-ring: oklch(0.74 0.16 235);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings:
+      "cv11", "ss01", "ss03";
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes cell-flip {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+    filter: brightness(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes amber-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--amber) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--amber) 0%, transparent);
+  }
+}
+
+.animate-cell-flip {
+  animation: cell-flip 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.animate-amber-pulse {
+  animation: amber-pulse 1.8s ease-in-out infinite;
+}
+
+.heatcell-frag:hover {
+  filter: brightness(1.25) saturate(1.2);
+  transform: scale(1.15) !important;
+  z-index: 2;
+  transition-duration: 80ms !important;
+}
+
+.heatcell-booked:hover {
+  filter: brightness(1.18);
+  transform: scale(1.12) !important;
+  z-index: 2;
+  transition-duration: 80ms !important;
+}
+
+.bg-grid-fade {
+  background-image:
+    radial-gradient(
+      ellipse at top,
+      color-mix(in oklab, var(--primary) 18%, transparent),
+      transparent 60%
+    );
+}
+
+@keyframes scan-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--primary) 60%, transparent),
+      0 0 40px 0 color-mix(in oklab, var(--primary) 40%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 12px color-mix(in oklab, var(--primary) 0%, transparent),
+      0 0 60px 8px color-mix(in oklab, var(--primary) 50%, transparent);
+  }
+}
+
+.animate-scan-bar {
+  animation: scan-bar 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ===== GapGenius "Lego rearrange" preloader ===== */
+@keyframes brick-shuffle-a {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  25%  { transform: translate(28px, -6px) rotate(4deg); }
+  50%  { transform: translate(56px, 0) rotate(0deg); }
+  75%  { transform: translate(28px, 6px) rotate(-4deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+@keyframes brick-shuffle-b {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  25%  { transform: translate(-22px, 8px) rotate(-3deg); }
+  50%  { transform: translate(-44px, 0) rotate(0deg); }
+  75%  { transform: translate(-22px, -8px) rotate(3deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+@keyframes brick-rise {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+@keyframes brick-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 0%, transparent); }
+  50%      { box-shadow: 0 0 24px 2px color-mix(in oklab, var(--primary) 60%, transparent); }
+}
+.animate-brick-a    { animation: brick-shuffle-a 2.4s cubic-bezier(.65,.05,.35,1) infinite; }
+.animate-brick-b    { animation: brick-shuffle-b 2.4s cubic-bezier(.65,.05,.35,1) infinite; }
+.animate-brick-rise { animation: brick-rise 1.6s ease-in-out infinite; }
+.animate-brick-glow { animation: brick-glow 2s ease-in-out infinite; }
+
+/* ===== Route transition: bricks snap into place to spell GapGenius ===== */
+@keyframes brick-snap {
+  0%   { opacity: 0; transform: translateY(-40px) rotate(-12deg) scale(0.6); }
+  60%  { opacity: 1; transform: translateY(6px) rotate(2deg) scale(1.05); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+}
+.animate-brick-snap { animation: brick-snap 0.65s cubic-bezier(.34,1.56,.64,1) both; }
+
+@keyframes route-fade {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-route-fade { animation: route-fade 3s ease-in-out forwards; }
