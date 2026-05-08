@@ -225,3 +225,141 @@ class AIRecommendationsResponse(BaseModel):
     recommendations: List[AIRecommendation] = []
     executive_summary: str = ""
     error: Optional[str] = None
+
+
+# ── Gmail models ──────────────────────────────────────────────────────────────
+
+class EmailSummary(BaseModel):
+    id: str
+    thread_id: str
+    subject: str
+    sender: str
+    date: str
+    snippet: str
+    is_unread: bool
+    is_booking_inquiry: bool
+
+
+class EmailDetail(EmailSummary):
+    body: str
+    reply_to: str = ""
+
+
+class BookingDetails(BaseModel):
+    is_booking_inquiry: bool
+    guest_name: Optional[str] = None
+    guest_email: Optional[str] = None
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    nights: Optional[int] = None
+    rooms_needed: Optional[int] = None
+    room_type_preference: Optional[str] = None
+    guests_count: Optional[int] = None
+    special_requests: Optional[str] = None
+    budget_per_night: Optional[float] = None
+    missing_info: List[str] = []
+    suggested_reply: str = ""
+
+
+class GmailStatusResponse(BaseModel):
+    authenticated: bool
+    auth_url: Optional[str] = None
+    unread_inquiry_count: int = 0
+    user_email: Optional[str] = None
+
+
+class EmailsResponse(BaseModel):
+    success: bool
+    emails: List[EmailSummary] = []
+    error: Optional[str] = None
+
+
+class ParsedEmailResponse(BaseModel):
+    success: bool
+    email: Optional[EmailDetail] = None
+    booking_details: Optional[BookingDetails] = None
+    error: Optional[str] = None
+
+
+class SendReplyRequest(BaseModel):
+    message_id: str
+    thread_id: str
+    to: str
+    subject: str
+    body: str
+
+
+class SendReplyResponse(BaseModel):
+    success: bool
+    sent_id: str = ""
+    error: Optional[str] = None
+
+
+class DraftReplyRequest(BaseModel):
+    message_id: str
+    reply_type: str = "custom"   # accept | reject | missing_info | custom
+    custom_instruction: str = ""
+
+
+class ThreadResponse(BaseModel):
+    success: bool
+    messages: List[EmailDetail] = []
+    error: Optional[str] = None
+
+
+class CreateBookingRequest(BaseModel):
+    email_id: str
+    thread_id: str
+    guest_name: Optional[str] = None
+    guest_email: Optional[str] = None
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    nights: Optional[int] = None
+    rooms_needed: Optional[int] = None
+    room_type_preference: Optional[str] = None
+    guests_count: Optional[int] = None
+    special_requests: Optional[str] = None
+
+
+class BookingRecord(BaseModel):
+    id: str
+    created_at: str
+    status: str
+    email_id: Optional[str] = None
+    thread_id: Optional[str] = None
+    guest_name: Optional[str] = None
+    guest_email: Optional[str] = None
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    nights: Optional[int] = None
+    rooms_needed: Optional[int] = None
+    room_type_preference: Optional[str] = None
+    guests_count: Optional[int] = None
+    special_requests: Optional[str] = None
+
+
+# ── Holiday & Event Models ────────────────────────────────────────────────────
+
+class HolidayItem(BaseModel):
+    date: str
+    name: str
+    type: str = "public"  # "public", "observance"
+
+
+class HolidaysResponse(BaseModel):
+    holidays: List[HolidayItem]
+    location: str
+    year: int
+
+
+class EventItem(BaseModel):
+    date: str
+    name: str
+    type: str  # "festival", "sports", "cultural", "trade", "holiday_period"
+    impact: str = "medium"  # "high", "medium", "low"
+    description: str = ""
+
+
+class EventsResponse(BaseModel):
+    events: List[EventItem]
+    location: str

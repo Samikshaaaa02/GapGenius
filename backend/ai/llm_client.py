@@ -107,6 +107,13 @@ def structured_completion(
         raise
 
 
+import re as _re
+
+def _strip_think_tags(text: str) -> str:
+    """Remove <think>...</think> reasoning blocks that some models (MiniMax, DeepSeek) emit."""
+    return _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
+
+
 def plain_completion(
     system_prompt: str,
     messages: list[dict],
@@ -128,7 +135,7 @@ def plain_completion(
             system=system_prompt,
             messages=messages,
         )
-        return response.content[0].text
+        return _strip_think_tags(response.content[0].text)
 
     if provider == "openai":
         import openai
@@ -137,7 +144,7 @@ def plain_completion(
         response = client.chat.completions.create(
             model=model, max_tokens=max_tokens, messages=all_messages
         )
-        return response.choices[0].message.content or ""
+        return _strip_think_tags(response.choices[0].message.content or "")
 
     if provider == "gemini":
         import google.generativeai as genai
@@ -146,7 +153,6 @@ def plain_completion(
             model_name=model,
             system_instruction=system_prompt,
         )
-        # Convert messages to Gemini format
         history = []
         for msg in messages[:-1]:
             history.append({
@@ -155,7 +161,7 @@ def plain_completion(
             })
         chat = gemini_model.start_chat(history=history)
         response = chat.send_message(messages[-1]["content"])
-        return response.text
+        return _strip_think_tags(response.text)
 
     if provider == "minimax":
         import openai
@@ -172,6 +178,6 @@ def plain_completion(
         response = client.chat.completions.create(
             model=model, max_tokens=max_tokens, messages=all_messages
         )
-        return response.choices[0].message.content or ""
+        return _strip_think_tags(response.choices[0].message.content or "")
 
     raise ValueError(f"Unsupported LLM provider: {provider}")

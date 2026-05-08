@@ -2,14 +2,26 @@
 import io
 import csv
 import os
+import re
+import asyncio
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="instructor")
 from datetime import date, timedelta
+from calendar import monthrange
 from typing import Optional
 
+try:
+    import holidays as _holidays_lib
+    _HOLIDAYS_AVAILABLE = True
+except ImportError:
+    _holidays_lib = None
+    _HOLIDAYS_AVAILABLE = False
+
 import pandas as pd
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from sse_starlette.sse import EventSourceResponse
 
 from config import settings
 from models import (
@@ -20,6 +32,10 @@ from models import (
     Room, Booking, RoomCategory, Channel,
     AnalyzeBookingsRequest, AnalyzeBookingsResponse,
     AIRecommendationsRequest, AIRecommendationsResponse,
+    GmailStatusResponse, EmailsResponse, ParsedEmailResponse,
+    SendReplyRequest, SendReplyResponse, DraftReplyRequest,
+    ThreadResponse, CreateBookingRequest, BookingRecord,
+    HolidaysResponse, EventsResponse,
 )
 from data.mock_generator import generate_hotel_data
 from ml.gap_detector import build_availability_matrix, detect_orphan_gaps
@@ -31,7 +47,7 @@ app = FastAPI(title="GapGenius API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:4173"],
+    allow_origins=["http://localhost:5173", "http://localhost:4173", "http://localhost:8080"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -657,3 +673,345 @@ def update_llm_config(req: LlmConfigRequest):
         "model": settings.active_model,
         "has_key": bool(settings.active_api_key),
     }
+
+
+# ── Holiday & Event Store ────────────────────────────────────────────────────
+
+# In-memory caches: avoid repeated computation per request
+_holiday_store: dict[str, list[dict]] = {}          # "location:year" → list of holiday dicts
+_event_store: dict[str, dict[int, list[dict]]] = {}  # location → year → list of event dicts
+
+
+def _extract_state_code(location: str) -> str | None:
+    """Extract US 2-letter state abbreviation from location string."""
+    match = re.search(r',\s*([A-Z]{2})\b', location.upper())
+    return match.group(1) if match else None
+
+
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """Return the nth occurrence of weekday (Mon=0..Sun=6) in the given month.
+    n=-1 returns the last occurrence."""
+    if n == -1:
+        _, max_day = monthrange(year, month)
+        last = date(year, month, max_day)
+        delta = (last.weekday() - weekday) % 7
+        return last - timedelta(days=delta)
+    first = date(year, month, 1)
+    delta = (weekday - first.weekday()) % 7
+    return first + timedelta(days=delta + (n - 1) * 7)
+
+
+def _build_events(location: str, year: int) -> list[dict]:
+    """Build hospitality-relevant events for a location/year (nationwide + city-specific)."""
+    loc_up = location.upper()
+    state = _extract_state_code(location)
+    evts: list[dict] = []
+
+    def add(d: date, name: str, type_: str, impact: str, desc: str = ""):
+        evts.append({"date": str(d), "name": name, "type": type_, "impact": impact, "description": desc})
+
+    # ── Nationwide ──────────────────────────────────────────────────────────
+    add(date(year, 2, 14), "Valentine's Day", "cultural", "high", "Peak demand for romantic getaways")
+    add(date(year, 7, 4),  "Independence Day", "festival", "high", "Major travel holiday")
+    add(date(year, 10, 31), "Halloween", "festival", "medium", "Weekend events drive leisure travel")
+    add(date(year, 12, 24), "Christmas Eve", "holiday_period", "high", "Peak holiday travel")
+    add(date(year, 12, 31), "New Year's Eve", "festival", "high", "Premium pricing opportunity")
+    add(date(year, 3, 14),  "Spring Break Begins", "holiday_period", "high", "Student & family travel surge")
+
+    # Memorial Day weekend (Sat before last Mon in May)
+    mem_mon = _nth_weekday(year, 5, 0, -1)
+    add(mem_mon - timedelta(days=2), "Memorial Day Weekend", "holiday_period", "high", "Peak leisure travel weekend")
+    # Labor Day weekend (Sat before first Mon in September)
+    labor_mon = _nth_weekday(year, 9, 0, 1)
+    add(labor_mon - timedelta(days=2), "Labor Day Weekend", "holiday_period", "high", "Last summer travel surge")
+    # Thanksgiving (4th Thursday in November)
+    thanksgiving = _nth_weekday(year, 11, 3, 4)
+    add(thanksgiving, "Thanksgiving Weekend", "holiday_period", "high", "Family travel peak")
+
+    # ── City / state specific ────────────────────────────────────────────────
+    if state == "NY" or "NEW YORK" in loc_up:
+        add(date(year, 3, 17),  "St. Patrick's Day Parade", "cultural", "high", "Major NYC street event")
+        add(date(year, 6, 28),  "NYC Pride Parade", "cultural", "high", "Large-scale city event")
+        add(date(year, 2, 7),   "NYC Fashion Week (Feb)", "trade", "high", "Trade visitors fill Midtown hotels")
+        add(date(year, 9, 5),   "NYC Fashion Week (Sept)", "trade", "high", "Post-Labor Day demand spike")
+        add(date(year, 8, 25),  "US Open Tennis Begins", "sports", "medium", "Flushing Meadows draws international visitors")
+        add(_nth_weekday(year, 11, 6, 1), "NYC Marathon", "sports", "high", "City-wide demand spike")
+
+    elif state == "CA" or "LOS ANGELES" in loc_up or "SAN FRANCISCO" in loc_up:
+        add(date(year, 1, 1),   "Rose Parade (Pasadena)", "festival", "high", "New Year's Day tradition")
+        add(date(year, 3, 16),  "LA Marathon", "sports", "medium", "Road closures & hotel demand")
+        add(date(year, 6, 29),  "SF Pride Parade", "cultural", "high", "Large-scale city event")
+        add(date(year, 4, 11),  "Coachella Weekend 1", "festival", "high", "Desert resort demand peak")
+        add(date(year, 4, 18),  "Coachella Weekend 2", "festival", "high")
+
+    elif state == "FL" or "MIAMI" in loc_up or "ORLANDO" in loc_up:
+        add(date(year, 3, 21),  "Miami Music Week (MMW)", "festival", "high", "Massive influx to South Beach")
+        add(date(year, 3, 7),   "Spring Break Peak (FL)", "holiday_period", "high")
+        add(date(year, 10, 4),  "Halloween Horror Nights (Orlando)", "festival", "medium")
+
+    elif state == "IL" or "CHICAGO" in loc_up:
+        add(date(year, 7, 31),  "Lollapalooza Chicago", "festival", "high", "Grant Park music festival")
+        add(date(year, 10, 11), "Chicago Marathon", "sports", "high")
+        add(date(year, 3, 17),  "Chicago St. Patrick's Day", "cultural", "high", "River dyeing tradition")
+
+    elif state == "NV" or "LAS VEGAS" in loc_up:
+        add(date(year, 1, 5),   "CES (Consumer Electronics Show)", "trade", "high", "Largest tech trade show")
+        add(date(year, 11, 19), "Las Vegas Grand Prix", "sports", "high", "F1 street circuit")
+        add(date(year, 3, 27),  "March Madness Finals", "sports", "medium")
+
+    elif state == "TX" or "HOUSTON" in loc_up or "DALLAS" in loc_up or "AUSTIN" in loc_up:
+        add(date(year, 3, 7),   "SXSW (Austin)", "trade", "high", "Music, film & tech festival")
+        add(date(year, 10, 3),  "Texas State Fair (Dallas)", "festival", "medium")
+
+    elif state == "MA" or "BOSTON" in loc_up:
+        add(_nth_weekday(year, 4, 0, 3), "Boston Marathon", "sports", "high", "Third Monday in April")
+        add(date(year, 6, 15),  "Boston Pride Parade", "cultural", "medium")
+
+    # Dedup by (date, name) and sort
+    seen: set[tuple] = set()
+    result = []
+    for e in sorted(evts, key=lambda x: x["date"]):
+        k = (e["date"], e["name"])
+        if k not in seen:
+            seen.add(k)
+            result.append(e)
+    return result
+
+
+@app.get("/api/holidays", response_model=HolidaysResponse)
+def get_holidays(location: str = "New York, NY · USA", year: int = 0):
+    """Return public holidays for a US location and year."""
+    if not year:
+        year = date.today().year
+
+    cache_key = f"{location}:{year}"
+    if cache_key not in _holiday_store:
+        rows: list[dict] = []
+        if _HOLIDAYS_AVAILABLE:
+            state = _extract_state_code(location)
+            try:
+                h = _holidays_lib.US(subdiv=state, years=year) if state else _holidays_lib.US(years=year)
+                rows = [
+                    {"date": str(d), "name": name, "type": "public"}
+                    for d, name in sorted(h.items())
+                ]
+            except Exception as exc:
+                print(f"[GG:holidays] {exc}")
+        _holiday_store[cache_key] = rows
+
+    return HolidaysResponse(
+        holidays=_holiday_store[cache_key],
+        location=location,
+        year=year,
+    )
+
+
+@app.get("/api/events", response_model=EventsResponse)
+def get_events(location: str = "New York, NY · USA", days: int = 180):
+    """Return upcoming hospitality-relevant events for a location."""
+    today = date.today()
+    end = today + timedelta(days=days)
+
+    if location not in _event_store:
+        _event_store[location] = {}
+
+    for yr in {today.year, end.year}:
+        if yr not in _event_store[location]:
+            _event_store[location][yr] = _build_events(location, yr)
+
+    all_evts = _event_store[location][today.year] + (
+        _event_store[location].get(end.year, []) if end.year != today.year else []
+    )
+    upcoming = sorted(
+        [e for e in all_evts if today <= date.fromisoformat(e["date"]) <= end],
+        key=lambda x: x["date"],
+    )
+    return EventsResponse(events=upcoming, location=location)
+
+
+# ── Gmail Integration ──────────────────────────────────────────────────────────
+
+_AUTH_ERRORS = ("invalid_grant", "token has been expired", "token has been revoked", "invalid_rapt")
+
+@app.get("/api/gmail/status", response_model=GmailStatusResponse)
+def gmail_status():
+    """Check Gmail auth status. Auto-clears expired/revoked tokens."""
+    import gmail_client as gc
+    authenticated = gc.is_authenticated()
+    auth_url = None
+    unread = 0
+    user_email = None
+
+    if authenticated:
+        try:
+            user_email = gc.get_user_email()
+            unread = gc.get_unread_inquiry_count()
+        except Exception as ex:
+            err_lower = str(ex).lower()
+            if any(e in err_lower for e in _AUTH_ERRORS):
+                # Token revoked or expired — clear it so the connect flow kicks in
+                gc.clear_token()
+                authenticated = False
+            # Other errors (network etc.) — keep authenticated=True, just skip unread
+
+    if not authenticated:
+        if settings.gmail_client_id and not settings.gmail_client_id.startswith("your-"):
+            try:
+                auth_url = gc.get_auth_url()
+            except Exception:
+                pass
+
+    return GmailStatusResponse(
+        authenticated=authenticated,
+        auth_url=auth_url,
+        unread_inquiry_count=unread,
+        user_email=user_email,
+    )
+
+
+@app.get("/api/gmail/auth-url")
+def gmail_auth_url():
+    """Get Google OAuth authorization URL."""
+    if not settings.gmail_client_id or settings.gmail_client_id.startswith("your-"):
+        raise HTTPException(status_code=400, detail="Gmail client_id not configured in .env")
+    import gmail_client as gc
+    return {"auth_url": gc.get_auth_url()}
+
+
+@app.get("/api/gmail/callback")
+def gmail_callback(code: str, state: str = ""):
+    """Handle OAuth callback — exchange code for tokens then redirect to frontend."""
+    import gmail_client as gc
+    try:
+        gc.exchange_code(code)
+        return RedirectResponse(url=f"{settings.frontend_url}/?gmail=connected")
+    except Exception as e:
+        return RedirectResponse(url=f"{settings.frontend_url}/?gmail=error&msg={str(e)[:100]}")
+
+
+@app.get("/api/gmail/emails", response_model=EmailsResponse)
+def gmail_emails(max_results: int = 30, unread_only: bool = False):
+    """Fetch recent emails, filtered to booking inquiries first."""
+    import gmail_client as gc
+    try:
+        emails = gc.fetch_recent_emails(max_results=max_results, unread_only=unread_only)
+        # Sort: unread booking inquiries first
+        emails.sort(key=lambda e: (not e["is_booking_inquiry"], not e["is_unread"]))
+        from models import EmailSummary
+        return EmailsResponse(
+            success=True,
+            emails=[EmailSummary(**{k: v for k, v in e.items() if k != "body"}) for e in emails],
+        )
+    except Exception as ex:
+        return EmailsResponse(success=False, error=str(ex))
+
+
+@app.get("/api/gmail/email/{message_id}", response_model=ParsedEmailResponse)
+def gmail_get_email(message_id: str):
+    """Fetch a single email and parse it with AI."""
+    import gmail_client as gc
+    from ai.email_parser import parse_inquiry
+    from models import EmailDetail, BookingDetails as BDModel
+    try:
+        raw = gc.fetch_email_by_id(message_id)
+        gc.mark_as_read(message_id)
+        details = parse_inquiry(
+            subject=raw["subject"],
+            body=raw["body"],
+            sender=raw["sender"],
+        )
+        return ParsedEmailResponse(
+            success=True,
+            email=EmailDetail(**raw),
+            booking_details=BDModel(**details.model_dump()),
+        )
+    except Exception as ex:
+        import traceback; traceback.print_exc()
+        return ParsedEmailResponse(success=False, error=str(ex))
+
+
+@app.post("/api/gmail/draft-reply")
+def gmail_draft_reply(req: DraftReplyRequest):
+    """Generate an AI-drafted reply for a given email."""
+    import gmail_client as gc
+    from ai.email_parser import parse_inquiry, draft_reply
+    try:
+        raw = gc.fetch_email_by_id(req.message_id)
+        details = parse_inquiry(raw["subject"], raw["body"], raw["sender"])
+        reply = draft_reply(
+            subject=raw["subject"],
+            body=raw["body"],
+            sender=raw["sender"],
+            booking_details=details,
+            reply_type=req.reply_type,
+            custom_instruction=req.custom_instruction,
+        )
+        return {"success": True, "draft": reply, "to": raw["reply_to"] or raw["sender"]}
+    except Exception as ex:
+        return {"success": False, "error": str(ex)}
+
+
+@app.post("/api/gmail/send", response_model=SendReplyResponse)
+def gmail_send(req: SendReplyRequest):
+    """Send an email reply."""
+    import gmail_client as gc
+    try:
+        sent_id = gc.send_reply(
+            to=req.to,
+            subject=req.subject,
+            body=req.body,
+            thread_id=req.thread_id or None,
+        )
+        return SendReplyResponse(success=True, sent_id=sent_id)
+    except Exception as ex:
+        return SendReplyResponse(success=False, error=str(ex))
+
+
+# SSE stream — pushes new inquiry count every 30 s
+@app.get("/api/gmail/stream")
+async def gmail_stream(request: Request):
+    import gmail_client as gc
+
+    async def event_generator():
+        last_count = -1
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                count = gc.get_unread_inquiry_count() if gc.is_authenticated() else 0
+            except Exception:
+                count = 0
+            if count != last_count:
+                last_count = count
+                yield {"data": str(count)}
+            await asyncio.sleep(10)
+
+    return EventSourceResponse(event_generator())
+
+
+@app.get("/api/gmail/thread/{thread_id}", response_model=ThreadResponse)
+def gmail_thread(thread_id: str):
+    """Fetch all messages in a Gmail thread."""
+    import gmail_client as gc
+    try:
+        messages = gc.fetch_thread(thread_id)
+        return ThreadResponse(success=True, messages=messages)
+    except Exception as ex:
+        return ThreadResponse(success=False, error=str(ex))
+
+
+# ── Bookings ──────────────────────────────────────────────────────────────────
+
+@app.post("/api/bookings", response_model=BookingRecord)
+def create_booking(req: CreateBookingRequest):
+    """Create a confirmed booking from an email inquiry."""
+    from bookings_store import create_booking as store_create
+    booking = store_create(req.model_dump())
+    return BookingRecord(**booking)
+
+
+@app.get("/api/bookings", response_model=list[BookingRecord])
+def list_bookings():
+    """List all bookings."""
+    from bookings_store import list_bookings as store_list
+    return [BookingRecord(**b) for b in store_list()]

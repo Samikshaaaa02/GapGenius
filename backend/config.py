@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     minimax_api_key: str = ""
     minimax_group_id: str = ""
 
+    # Gmail OAuth
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
+    frontend_url: str = "http://localhost:8080"
+
     @property
     def active_model(self) -> str:
         if self.llm_model:
